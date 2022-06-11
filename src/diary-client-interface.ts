@@ -9,6 +9,7 @@ import {
   ShortDiaryEntry,
   UpdateDiaryEntryRequest
 } from "./types";
+import {ShortDiaryEntryDto} from "./base-client";
 
 export interface IDiaryClient {
   isLoggedIn(): boolean;
@@ -23,7 +24,7 @@ export interface IDiaryClient {
 
   getEntry(id: string): Promise<DiaryEntry>;
 
-  createDiaryEntry(req: CreateDiaryEntryRequest): Promise<DiaryEntry>;
+  createDiaryEntry(req: CreateDiaryEntryRequest): Promise<ShortDiaryEntryDto>;
 
   updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<DiaryEntry>;
 

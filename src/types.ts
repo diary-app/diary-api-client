@@ -15,6 +15,7 @@ export interface AuthResult {
 export interface Diary {
   id: string;
   name: string;
+  ownerId: string;
 }
 
 export interface ShortDiaryEntry {
@@ -25,25 +26,13 @@ export interface ShortDiaryEntry {
 }
 
 export interface DiaryEntry extends ShortDiaryEntry {
-  value: string[];
-  blocks: []
+  value: string;
+  blocks: DiaryEntryBlock[]
 }
 
 interface DiaryEntryBlock {
-  id?: string;
-  value: Map<string, any>;
-}
-
-export interface CreateDiaryEntryRequest {
-  name: string;
-  date: Date;
-  blocks: DiaryEntryBlock[];
-}
-
-export interface UpdateDiaryEntryRequest {
-  name: string;
-  date: Date;
-  blocks: DiaryEntryBlock[];
+  id: string;
+  value: string;
 }
 
 export interface ShareDiaryEntryRequest {
@@ -53,7 +42,6 @@ export interface ShareDiaryEntryRequest {
 
 export interface SharingTask {
     diaryId: string;
-    userId: string;
     username: string;
     sharedAt: Date;
 }
