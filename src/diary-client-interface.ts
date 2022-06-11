@@ -1,15 +1,13 @@
 import {
   AuthRequest,
   AuthResult,
-  CreateDiaryEntryRequest,
   Diary,
   DiaryEntry,
   ShareDiaryEntryRequest,
   SharingTask,
   ShortDiaryEntry,
-  UpdateDiaryEntryRequest
 } from "./types";
-import {ShortDiaryEntryDto} from "./base-client";
+import {CreateDiaryEntryRequest, ShortDiaryEntryDto, UpdateDiaryEntryRequest} from "./base-client";
 
 export interface IDiaryClient {
   isLoggedIn(): boolean;
@@ -26,7 +24,7 @@ export interface IDiaryClient {
 
   createDiaryEntry(req: CreateDiaryEntryRequest): Promise<ShortDiaryEntryDto>;
 
-  updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<DiaryEntry>;
+  updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<ShortDiaryEntry>;
 
   deleteDiaryEntry(id: string): Promise<void>;
 

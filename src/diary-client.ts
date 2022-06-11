@@ -34,13 +34,14 @@ import {SharingTaskNotFoundException} from "./exceptions/sharing-task-not-found-
 
 export interface IKeyStorage {
   set<T>(key: string, value: T): void;
-
   get<T>(key: string): T;
+  removeByPrefix(prefix: string): void;
 }
 
 const masterKeyKey = "mk-2ffb2fe3-20fe-4c3e-b421-6ec7c1d33415";
 const privateKeyKey = "diary-api.privateKey";
 const accessTokenKey = "diary-api.accessTokenKey"
+const diaryKeyPrefix = "diary-api.key:"
 
 export class DiaryClient implements IDiaryClient {
   private readonly keysStorage: IKeyStorage;
@@ -77,6 +78,7 @@ export class DiaryClient implements IDiaryClient {
     const response = await sendRequest();
     ensureSuccess(response);
 
+    this.clearKeys();
     this.keysStorage.set(accessTokenKey, response.data.token);
     this.keysStorage.set(masterKeyKey, masterKey);
     this.keysStorage.set(privateKeyKey, privateKey);
@@ -92,10 +94,22 @@ export class DiaryClient implements IDiaryClient {
     };
 
     const sendRequest = await AuthApiFp(this.getConfiguration()).v1AuthLoginPost(request);
-    const response = await sendRequest();
-    ensureSuccess(response);
+    const loginResponse = await sendRequest();
+    ensureSuccess(loginResponse);
 
-    this.keysStorage.set(accessTokenKey, response.data.token);
+    this.clearKeys();
+    this.keysStorage.set(accessTokenKey, loginResponse.data.token);
+
+    const myInfoReq = await UsersApiFp(this.getConfiguration()).v1UsersMeGet();
+    const myInfoResponse = await myInfoReq();
+    ensureSuccess(myInfoResponse);
+
+    const myInfo = myInfoResponse.data;
+    const masterKey = Encryption.getMasterKey(req.password, Buffer.from(myInfo.masterKeySalt));
+    const privateKey = Encryption.decryptAes(masterKey, Buffer.from(myInfo.encryptedPrivateKeyForSharing));
+    this.keysStorage.set(masterKeyKey, masterKey);
+    this.keysStorage.set(privateKeyKey, privateKey);
+
     return {authStatus: AuthStatus.Authorized};
   }
 
@@ -252,6 +266,7 @@ export class DiaryClient implements IDiaryClient {
     }
     const shareResponse = await (await tasksApi.v1SharingTasksPost(request))();
     ensureSuccess(shareResponse);
+    this.setDiaryKey(shareResponse.data.diaryId, newDiaryKey);
     return {
       id: entry.id,
       diaryId: shareResponse.data.diaryId,
@@ -262,7 +277,7 @@ export class DiaryClient implements IDiaryClient {
     }
   }
 
-  async updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<DiaryEntry> {
+  async updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<ShortDiaryEntry> {
     const entriesApi = DiaryEntriesApiFp(this.getConfiguration());
     const entryResponse = await (await entriesApi.v1DiaryEntriesIdGet(id))();
     ensureSuccess(entryResponse);
@@ -277,7 +292,16 @@ export class DiaryClient implements IDiaryClient {
     }));
 
     const sendRequest = await entriesApi.v1DiaryEntriesIdPatch(id, req);
-    Promise.resolve(undefined);
+    const updateResponse = await sendRequest();
+    ensureSuccess(updateResponse);
+    const updatedEntry = updateResponse.data;
+
+    return {
+      id: updatedEntry.id,
+      diaryId: updatedEntry.diaryId,
+      name: updatedEntry.name,
+      date: new Date(updatedEntry.date),
+    }
   }
 
   private getMasterKey(): Uint8Array {
@@ -289,11 +313,18 @@ export class DiaryClient implements IDiaryClient {
   }
 
   private getDiaryKey(diaryId: string): Uint8Array {
-    return this.keysStorage.get<Uint8Array>(diaryId);
+    return this.keysStorage.get<Uint8Array>(`${diaryKeyPrefix}${diaryId}`);
   }
 
   private setDiaryKey(diaryId: string, diaryKey: Uint8Array) {
-    return this.keysStorage.set<Uint8Array>(diaryId, diaryKey);
+    return this.keysStorage.set<Uint8Array>(`${diaryKeyPrefix}${diaryId}`, diaryKey);
+  }
+
+  private clearKeys(): void {
+    this.keysStorage.removeByPrefix(diaryKeyPrefix);
+    this.keysStorage.removeByPrefix(accessTokenKey);
+    this.keysStorage.removeByPrefix(masterKeyKey);
+    this.keysStorage.removeByPrefix(privateKeyKey);
   }
 
   private getConfiguration() {
