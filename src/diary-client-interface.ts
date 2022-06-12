@@ -16,7 +16,9 @@ export interface IDiaryClient {
 
   login(req: AuthRequest): Promise<AuthResult>;
 
-  getUser(name: string): Promise<ShortUserDto>;
+  getUserById(id: string): Promise<ShortUserDto>;
+
+  getUserByName(name: string): Promise<ShortUserDto>;
 
   getDiaries(): Promise<Diary[]>;
 

@@ -130,7 +130,14 @@ export class DiaryClient implements IDiaryClient {
     return {authStatus: AuthStatus.Authorized};
   }
 
-  async getUser(name: string): Promise<ShortUserDto> {
+  async getUserById(id: string): Promise<ShortUserDto> {
+    const sendReq = await UsersApiFp(this.getConfiguration()).v1UsersIdGet(id);
+    const response = await sendReq();
+    ensureSuccess(response);
+    return response.data;
+  }
+
+  async getUserByName(name: string): Promise<ShortUserDto> {
     const sendReq = await UsersApiFp(this.getConfiguration()).v1UsersNamenameGet(name);
     const response = await sendReq();
     ensureSuccess(response);
