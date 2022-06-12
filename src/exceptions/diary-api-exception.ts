@@ -1,4 +1,4 @@
-export class DiaryAuthException {
+export class DiaryApiException {
   public statusCode : number;
   private data: any;
 

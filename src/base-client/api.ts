@@ -559,6 +559,12 @@ export interface UpdateDiaryEntryRequest {
      */
     'date'?: string;
     /**
+     *
+     * @type {string}
+     * @memberOf UpdateDiaryEntryRequest
+     */
+    'value'?: string;
+    /**
      * 
      * @type {Array<DiaryEntryBlockDto>}
      * @memberof UpdateDiaryEntryRequest

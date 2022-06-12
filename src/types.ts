@@ -4,8 +4,8 @@ export interface AuthRequest {
 }
 
 export enum AuthStatus {
-  Authorized,
-  IncorrentUsernameOrPassword
+  Authorized = "Authorized",
+  IncorrectUsernameOrPassword = "IncorrectUsernameOrPassword"
 }
 
 export interface AuthResult {

@@ -1,26 +1,33 @@
-import NodeRSA = require("node-rsa");
+import NodeRSA = require('node-rsa');
 
 const publicKeyFormat: NodeRSA.FormatPem = 'pkcs8-public-pem';
 const privateKeyFormat: NodeRSA.FormatPem = 'pkcs8-private-pem';
 
-import {pbkdf2Sync} from "node:crypto";
-import * as crypto from "crypto";
-import * as aes from "aes-js";
-import * as Buffer from "buffer";
+import { pbkdf2Sync } from 'node:crypto';
+import * as crypto from 'crypto';
+import * as aes from 'aes-js';
 
 const iterations = 1;
 const keyLen = 32;
 
-const encoding = 'utf8';
 
 export interface RsaKeyPair {
-  publicKey: string;
-  privateKey: string;
+  publicKeyB64: string;
+  privateKeyB64: string;
 }
 
 export default class Encryption {
-  static bytesToText(bytes: Uint8Array): string {
-    return new TextDecoder(encoding).decode(bytes);
+  static base64ToBytes(base64: string) : Buffer {
+    return Buffer.from(base64, 'base64');
+  }
+  static utf8ToBytes(utf8str: string) : Buffer {
+    return Buffer.from(utf8str, 'utf8');
+  }
+  static bytesToBase64(bytes: Uint8Array) : string {
+    return Buffer.from(bytes).toString('base64');
+  }
+  static bytesToTextUtf8(bytes: Uint8Array): string {
+    return new TextDecoder('utf-8').decode(bytes);
   }
 
   static generateSalt(): Uint8Array {
@@ -32,7 +39,7 @@ export default class Encryption {
   }
 
   static getMasterKey(password: string, saltBytes: Uint8Array): Uint8Array {
-    return pbkdf2Sync(password, saltBytes, iterations, keyLen, 'sha-512');
+    return pbkdf2Sync(password, saltBytes, iterations, keyLen, 'sha512');
   }
 
   static generateRsaKeyPair(): RsaKeyPair {
@@ -40,7 +47,7 @@ export default class Encryption {
     nodeRsa.generateKeyPair();
     const publicKey = nodeRsa.exportKey(publicKeyFormat);
     const privateKey = nodeRsa.exportKey(privateKeyFormat);
-    return { publicKey, privateKey };
+    return { publicKeyB64: publicKey, privateKeyB64: privateKey };
   }
 
   static encryptAes(key: Uint8Array, data: Uint8Array): Uint8Array {
