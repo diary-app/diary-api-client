@@ -7,7 +7,7 @@ import {
   SharingTask,
   ShortDiaryEntry,
 } from "./types";
-import {CreateDiaryEntryRequest, ShortDiaryEntryDto, UpdateDiaryEntryRequest} from "./base-client";
+import { CreateDiaryEntryRequest, ShortDiaryEntryDto, ShortUserDto, UpdateDiaryEntryRequest } from './base-client';
 
 export interface IDiaryClient {
   isLoggedIn(): boolean;
@@ -15,6 +15,8 @@ export interface IDiaryClient {
   register(req: AuthRequest): Promise<AuthResult>;
 
   login(req: AuthRequest): Promise<AuthResult>;
+
+  getUser(name: string): Promise<ShortUserDto>;
 
   getDiaries(): Promise<Diary[]>;
 
@@ -28,9 +30,9 @@ export interface IDiaryClient {
 
   deleteDiaryEntry(id: string): Promise<void>;
 
-  shareDiaryEntry(req: ShareDiaryEntryRequest): Promise<DiaryEntry>;
-
   getSharingTasks(): Promise<SharingTask[]>;
 
-  acceptSharingTask(diaryId: string, userId: string): Promise<void>;
+  shareDiaryEntry(req: ShareDiaryEntryRequest): Promise<string>;
+
+  acceptSharingTask(diaryId: string): Promise<void>;
 }

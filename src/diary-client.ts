@@ -25,9 +25,9 @@ import {
   RegisterRequest,
   SharingTaskDto,
   SharingTasksApiFp,
-  ShortDiaryEntryDto, UpdateDiaryEntryRequest,
-  UsersApiFp
-} from "./base-client";
+  ShortDiaryEntryDto, ShortUserDto, UpdateDiaryEntryRequest,
+  UsersApiFp,
+} from './base-client';
 import {AxiosResponse} from "axios";
 import jwt_decode, {JwtPayload} from "jwt-decode";
 import {SharingTaskNotFoundException} from "./exceptions/sharing-task-not-found-exception";
@@ -52,6 +52,16 @@ export class DiaryClient implements IDiaryClient {
     baseUri: string) {
     this.keysStorage = keyStorage;
     this.baseUri = baseUri;
+  }
+
+  isLoggedIn(): boolean {
+    const token = this.keysStorage.get<string>(accessTokenKey);
+    if (token === "") {
+      return false
+    }
+    const decoded = jwt_decode<JwtPayload>(token);
+    const expTime = new Date(decoded.exp!);
+    return expTime > new Date();
   }
 
   async register(req: AuthRequest): Promise<AuthResult> {
@@ -113,6 +123,13 @@ export class DiaryClient implements IDiaryClient {
     return {authStatus: AuthStatus.Authorized};
   }
 
+  async getUser(name: string): Promise<ShortUserDto> {
+    const sendReq = await UsersApiFp(this.getConfiguration()).v1UsersNamenameGet(name);
+    const response = await sendReq();
+    ensureSuccess(response);
+    return response.data;
+  }
+
   async getDiaries(): Promise<Diary[]> {
     const sendRequest = await DiariesApiFp(this.getConfiguration()).v1DiariesGet();
     const response = await sendRequest();
@@ -130,42 +147,6 @@ export class DiaryClient implements IDiaryClient {
       name: d.name,
       ownerId: d.ownerId,
     }));
-  }
-
-  async acceptSharingTask(diaryId: string): Promise<void> {
-    const sharingTasksApi = SharingTasksApiFp(this.getConfiguration());
-    const mySharingTasksResponse = await (await sharingTasksApi.v1SharingTasksGet())();
-    ensureSuccess(mySharingTasksResponse);
-
-    const task = mySharingTasksResponse.data.items.find(t => t.diaryId === diaryId);
-    if (task == null)
-      throw new SharingTaskNotFoundException(diaryId);
-
-    const privateKey = this.getPrivateKey();
-    const masterKey = this.getMasterKey();
-
-    const diaryKey = Encryption.decryptRsa(privateKey, Buffer.from(task.encryptedDiaryKey));
-    this.setDiaryKey(diaryId, diaryKey);
-
-    const myEncryptedDiaryKey = Encryption.encryptAes(masterKey, diaryKey);
-    const encryptedKeyStr = Encryption.bytesToText(myEncryptedDiaryKey);
-    const req: AcceptSharedDiaryRequest = {diaryId, encryptedDiaryKey: encryptedKeyStr};
-    const send = await sharingTasksApi.v1SharingTasksAcceptPost(req);
-    const acceptResponse = await send();
-    ensureSuccess(acceptResponse);
-  }
-
-  async createDiaryEntry(req: CreateDiaryEntryRequest): Promise<ShortDiaryEntryDto> {
-    const send = await DiaryEntriesApiFp(this.getConfiguration()).v1DiaryEntriesPost(req);
-    const response = await send();
-    ensureSuccess(response);
-    return response.data;
-  }
-
-  async deleteDiaryEntry(id: string): Promise<void> {
-    const send = await DiaryEntriesApiFp(this.getConfiguration()).v1DiaryEntriesIdDelete(id);
-    const response = await send();
-    ensureSuccess(response);
   }
 
   async getEntries(diaryId?: string, date?: Date): Promise<ShortDiaryEntry[]> {
@@ -198,6 +179,46 @@ export class DiaryClient implements IDiaryClient {
     }
   }
 
+  async createDiaryEntry(req: CreateDiaryEntryRequest): Promise<ShortDiaryEntryDto> {
+    const send = await DiaryEntriesApiFp(this.getConfiguration()).v1DiaryEntriesPost(req);
+    const response = await send();
+    ensureSuccess(response);
+    return response.data;
+  }
+
+  async updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<ShortDiaryEntry> {
+    const entriesApi = DiaryEntriesApiFp(this.getConfiguration());
+    const entryResponse = await (await entriesApi.v1DiaryEntriesIdGet(id))();
+    ensureSuccess(entryResponse);
+
+    const diaryKey = this.getDiaryKey(entryResponse.data.diaryId);
+    const encrypt = (value: string) : string => {
+      return Encryption.bytesToText(Encryption.encryptAes(diaryKey, Buffer.from(value)))
+    }
+    req.blocksToUpsert = req.blocksToUpsert?.map((b) => ({
+      id: b.id,
+      value: encrypt(b.value),
+    }));
+
+    const sendRequest = await entriesApi.v1DiaryEntriesIdPatch(id, req);
+    const updateResponse = await sendRequest();
+    ensureSuccess(updateResponse);
+    const updatedEntry = updateResponse.data;
+
+    return {
+      id: updatedEntry.id,
+      diaryId: updatedEntry.diaryId,
+      name: updatedEntry.name,
+      date: new Date(updatedEntry.date),
+    }
+  }
+
+  async deleteDiaryEntry(id: string): Promise<void> {
+    const send = await DiaryEntriesApiFp(this.getConfiguration()).v1DiaryEntriesIdDelete(id);
+    const response = await send();
+    ensureSuccess(response);
+  }
+
   async getSharingTasks(): Promise<SharingTask[]> {
     const send = await SharingTasksApiFp(this.getConfiguration()).v1SharingTasksGet();
     const response = await send();
@@ -210,17 +231,7 @@ export class DiaryClient implements IDiaryClient {
     }));
   }
 
-  isLoggedIn(): boolean {
-    const token = this.keysStorage.get<string>(accessTokenKey);
-    if (token === "") {
-      return false
-    }
-    const decoded = jwt_decode<JwtPayload>(token);
-    const expTime = new Date(decoded.exp!);
-    return expTime > new Date();
-  }
-
-  async shareDiaryEntry(req: ShareDiaryEntryRequest): Promise<DiaryEntry> {
+  async shareDiaryEntry(req: ShareDiaryEntryRequest): Promise<string> {
     const configuration = this.getConfiguration();
     const tasksApi = SharingTasksApiFp(configuration);
     const usersApi = UsersApiFp(configuration);
@@ -267,41 +278,30 @@ export class DiaryClient implements IDiaryClient {
     const shareResponse = await (await tasksApi.v1SharingTasksPost(request))();
     ensureSuccess(shareResponse);
     this.setDiaryKey(shareResponse.data.diaryId, newDiaryKey);
-    return {
-      id: entry.id,
-      diaryId: shareResponse.data.diaryId,
-      name: entry.name,
-      date: new Date(entry.date),
-      value: Encryption.bytesToText(rawValue),
-      blocks: rawBlocks,
-    }
+    return shareResponse.data.diaryId;
   }
 
-  async updateDiaryEntry(id: string, req: UpdateDiaryEntryRequest): Promise<ShortDiaryEntry> {
-    const entriesApi = DiaryEntriesApiFp(this.getConfiguration());
-    const entryResponse = await (await entriesApi.v1DiaryEntriesIdGet(id))();
-    ensureSuccess(entryResponse);
+  async acceptSharingTask(diaryId: string): Promise<void> {
+    const sharingTasksApi = SharingTasksApiFp(this.getConfiguration());
+    const mySharingTasksResponse = await (await sharingTasksApi.v1SharingTasksGet())();
+    ensureSuccess(mySharingTasksResponse);
 
-    const diaryKey = this.getDiaryKey(entryResponse.data.diaryId);
-    const encrypt = (value: string) : string => {
-      return Encryption.bytesToText(Encryption.encryptAes(diaryKey, Buffer.from(value)))
-    }
-    req.blocksToUpsert = req.blocksToUpsert?.map((b) => ({
-      id: b.id,
-      value: encrypt(b.value),
-    }));
+    const task = mySharingTasksResponse.data.items.find(t => t.diaryId === diaryId);
+    if (task == null)
+      throw new SharingTaskNotFoundException(diaryId);
 
-    const sendRequest = await entriesApi.v1DiaryEntriesIdPatch(id, req);
-    const updateResponse = await sendRequest();
-    ensureSuccess(updateResponse);
-    const updatedEntry = updateResponse.data;
+    const privateKey = this.getPrivateKey();
+    const masterKey = this.getMasterKey();
 
-    return {
-      id: updatedEntry.id,
-      diaryId: updatedEntry.diaryId,
-      name: updatedEntry.name,
-      date: new Date(updatedEntry.date),
-    }
+    const diaryKey = Encryption.decryptRsa(privateKey, Buffer.from(task.encryptedDiaryKey));
+    this.setDiaryKey(diaryId, diaryKey);
+
+    const myEncryptedDiaryKey = Encryption.encryptAes(masterKey, diaryKey);
+    const encryptedKeyStr = Encryption.bytesToText(myEncryptedDiaryKey);
+    const req: AcceptSharedDiaryRequest = {diaryId, encryptedDiaryKey: encryptedKeyStr};
+    const send = await sharingTasksApi.v1SharingTasksAcceptPost(req);
+    const acceptResponse = await send();
+    ensureSuccess(acceptResponse);
   }
 
   private getMasterKey(): Uint8Array {
