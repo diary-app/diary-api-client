@@ -26,7 +26,7 @@ export default class Encryption {
   static bytesToBase64(bytes: Uint8Array) : string {
     return Buffer.from(bytes).toString('base64');
   }
-  static bytesToTextUtf8(bytes: Uint8Array): string {
+  static bytesToUtf8(bytes: Uint8Array): string {
     return new TextDecoder('utf-8').decode(bytes);
   }
 

@@ -72,7 +72,7 @@ export class DiaryClient implements IDiaryClient {
     const masterKeyBytes = Encryption.getMasterKey(req.password, saltBytes);
 
     const {publicKeyB64, privateKeyB64} = Encryption.generateRsaKeyPair()
-    const encryptedPrivateKeyBytes = Encryption.encryptAes(masterKeyBytes, Encryption.base64ToBytes(privateKeyB64));
+    const encryptedPrivateKeyBytes = Encryption.encryptAes(masterKeyBytes, Encryption.utf8ToBytes(privateKeyB64));
 
     const diaryKeyBytes = Encryption.generateKey();
     const encryptedDiaryKeyBytes = Encryption.encryptAes(masterKeyBytes, diaryKeyBytes);
@@ -121,7 +121,7 @@ export class DiaryClient implements IDiaryClient {
     const saltBytes = Encryption.base64ToBytes(myInfo.masterKeySalt);
     const encryptedPrivateKeyBytes = Encryption.base64ToBytes(myInfo.encryptedPrivateKeyForSharing);
     const masterKeyBytes = Encryption.getMasterKey(req.password, saltBytes);
-    const privateKey = Encryption.decryptAes(masterKeyBytes, encryptedPrivateKeyBytes);
+    const privateKey = Encryption.bytesToUtf8(Encryption.decryptAes(masterKeyBytes, encryptedPrivateKeyBytes));
     this.setMasterKey(masterKeyBytes);
     this.keysStorage.set(privateKeyKey, privateKey);
 
@@ -175,7 +175,7 @@ export class DiaryClient implements IDiaryClient {
     const entry = response.data;
     const diaryKey = this.getDiaryKey(entry.diaryId);
     const decrypt = (encrypted: string) : string => {
-      return Encryption.bytesToTextUtf8(Encryption.decryptAes(diaryKey, Encryption.base64ToBytes(encrypted)));
+      return Encryption.bytesToUtf8(Encryption.decryptAes(diaryKey, Encryption.base64ToBytes(encrypted)));
     }
     return {
       id: entry.id,
