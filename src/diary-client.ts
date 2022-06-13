@@ -34,10 +34,11 @@ import { AxiosResponse } from 'axios';
 import jwt_decode, { JwtPayload } from 'jwt-decode';
 import { SharingTaskNotFoundException } from './exceptions/sharing-task-not-found-exception';
 import DiaryIdNotFoundException from './exceptions/diary-id-not-found-exception';
+import { DiaryBadRequestException } from './exceptions/diary-bad-request-exception';
 
 export interface IKeyStorage {
-  set<T>(key: string, value: T): void;
-  get<T>(key: string): T;
+  set(key: string, value: string): void;
+  get(key: string): string;
   removeByPrefix(prefix: string): void;
 }
 
@@ -58,16 +59,22 @@ export class DiaryClient implements IDiaryClient {
   }
 
   isLoggedIn(): boolean {
-    const token = this.keysStorage.get<string>(accessTokenKey);
-    if (token === "") {
+    const token = this.keysStorage.get(accessTokenKey);
+    if (!token) {
       return false
     }
     const decoded = jwt_decode<JwtPayload>(token);
+    if (!decoded.exp)
+      return false;
     const expTime = new Date(decoded.exp!);
     return expTime > new Date();
   }
 
   async register(req: AuthRequest): Promise<AuthResult> {
+    if (!req.username || !req.password) {
+      throw new DiaryBadRequestException("field 'username' or 'password' was null or empty");
+    }
+
     const saltBytes = Encryption.generateSalt();
     const masterKeyBytes = Encryption.getMasterKey(req.password, saltBytes);
 
@@ -101,6 +108,10 @@ export class DiaryClient implements IDiaryClient {
   }
 
   async login(req: AuthRequest): Promise<AuthResult> {
+    if (!req.username || !req.password) {
+      throw new DiaryBadRequestException("field 'username' or 'password' was null or empty");
+    }
+
     const request: LoginRequest = {
       username: req.username,
       password: req.password,
@@ -131,6 +142,9 @@ export class DiaryClient implements IDiaryClient {
   }
 
   async getUserById(id: string): Promise<ShortUserDto> {
+    if (!id)
+      throw new DiaryBadRequestException("field 'id' was null or empty");
+
     const sendReq = await UsersApiFp(this.getConfiguration()).v1UsersIdGet(id);
     const response = await sendReq();
     ensureSuccess(response);
@@ -138,6 +152,9 @@ export class DiaryClient implements IDiaryClient {
   }
 
   async getUserByName(name: string): Promise<ShortUserDto> {
+    if (!name)
+      throw new DiaryBadRequestException("field 'name' was null or empty");
+
     const sendReq = await UsersApiFp(this.getConfiguration()).v1UsersNamenameGet(name);
     const response = await sendReq();
     ensureSuccess(response);
@@ -176,6 +193,9 @@ export class DiaryClient implements IDiaryClient {
   }
 
   async getEntry(id: string): Promise<DiaryEntry> {
+    if (!id)
+      throw new DiaryBadRequestException("'id' was null or empty");
+
     const send = await DiaryEntriesApiFp(this.getConfiguration()).v1DiaryEntriesIdGet(id);
     const response = await send();
     ensureSuccess(response);
@@ -199,6 +219,8 @@ export class DiaryClient implements IDiaryClient {
 
   async createDiaryEntry(req: CreateDiaryEntryRequest): Promise<ShortDiaryEntryDto> {
     const diaryKey = this.getDiaryKey(req.diaryId);
+    if (!req.value && req.value !== "" || !req.name || !req.date)
+      throw new DiaryBadRequestException("invalid request body");
     req.value = Encryption.bytesToBase64(Encryption.encryptAes(diaryKey, Encryption.utf8ToBytes(req.value)));
     const send = await DiaryEntriesApiFp(this.getConfiguration()).v1DiaryEntriesPost(req);
     const response = await send();
@@ -221,11 +243,15 @@ export class DiaryClient implements IDiaryClient {
     const encrypt = (value: string) : string => {
       return Encryption.bytesToBase64(Encryption.encryptAes(diaryKey, Encryption.utf8ToBytes(value)))
     }
-    req.blocksToUpsert = req.blocksToUpsert?.map((b) => ({
-      id: b.id,
-      value: encrypt(b.value),
-    }));
-    req.value = req.value ? encrypt(req.value) : undefined;
+    req.blocksToUpsert = req.blocksToUpsert?.map((b) => {
+      if (!b.value && b.value !== "")
+        throw new DiaryBadRequestException(`value of block ${b.id} was invalid`);
+      return ({
+        id: b.id,
+        value: encrypt(b.value),
+      });
+    });
+    req.value = req.value || req.value === "" ? encrypt(req.value) : undefined;
 
     if (req.diaryId && req.diaryId !== entry.diaryId) {
       const updatedOrDeletedBlocks = new Set<string>();
@@ -342,7 +368,7 @@ export class DiaryClient implements IDiaryClient {
   }
 
   private getMasterKey(): Uint8Array {
-    const masterKeyB64 = this.keysStorage.get<string>(masterKeyKey);
+    const masterKeyB64 = this.keysStorage.get(masterKeyKey);
     return Encryption.base64ToBytes(masterKeyB64);
   }
 
@@ -352,11 +378,11 @@ export class DiaryClient implements IDiaryClient {
   }
 
   private getPrivateKey(): string {
-    return this.keysStorage.get<string>(privateKeyKey);
+    return this.keysStorage.get(privateKeyKey);
   }
 
   private getDiaryKey(diaryId: string): Uint8Array {
-    const keyB64 = this.keysStorage.get<string>(`${diaryKeyPrefix}${diaryId}`);
+    const keyB64 = this.keysStorage.get(`${diaryKeyPrefix}${diaryId}`);
     if (keyB64 === "") {
       throw new DiaryIdNotFoundException(diaryId);
     }
@@ -379,7 +405,7 @@ export class DiaryClient implements IDiaryClient {
   private getConfiguration() {
     return new Configuration({
       basePath: this.baseUri,
-      accessToken: this.keysStorage.get<string>(accessTokenKey)
+      accessToken: this.keysStorage.get(accessTokenKey)
     });
   }
 }
