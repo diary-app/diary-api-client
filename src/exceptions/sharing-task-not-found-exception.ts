@@ -1,7 +1,7 @@
-export class SharingTaskNotFoundException {
-  private diaryId: string;
+import { DiaryBadRequestException } from './diary-bad-request-exception';
 
+export class SharingTaskNotFoundException extends DiaryBadRequestException {
   constructor(diaryId: string) {
-    this.diaryId = diaryId;
+    super(`sharing task for diary ${diaryId} was not found`);
   }
 }

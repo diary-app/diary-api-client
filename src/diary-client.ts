@@ -33,7 +33,7 @@ import {
 import { AxiosResponse } from 'axios';
 import jwt_decode, { JwtPayload } from 'jwt-decode';
 import { SharingTaskNotFoundException } from './exceptions/sharing-task-not-found-exception';
-import DiaryIdNotFoundException from './exceptions/diary-id-not-found-exception';
+import DiaryKeyNotFoundException from './exceptions/diary-key-not-found-exception';
 import { DiaryBadRequestException } from './exceptions/diary-bad-request-exception';
 
 export interface IKeyStorage {
@@ -383,8 +383,8 @@ export class DiaryClient implements IDiaryClient {
 
   private getDiaryKey(diaryId: string): Uint8Array {
     const keyB64 = this.keysStorage.get(`${diaryKeyPrefix}${diaryId}`);
-    if (keyB64 === "") {
-      throw new DiaryIdNotFoundException(diaryId);
+    if (!keyB64) {
+      throw new DiaryKeyNotFoundException(diaryId);
     }
 
     return Encryption.base64ToBytes(keyB64);
